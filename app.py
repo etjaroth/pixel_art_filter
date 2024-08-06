@@ -27,14 +27,16 @@ class ImageApp:
         self.main_frame.grid_rowconfigure(0, weight=1)
         self.main_frame.grid_rowconfigure(1, weight=1)
         
+        # Initial image and palette
+        self.image_display = None
+        self.image_path = tk.StringVar()
+        self.reset()
+        
         # Creating widgets
         self.background_color = "lightblue"
         self.create_widgets()
         
-        # Initial image and image path
-        self.image = None
-        self.image_path = ""
-        self.processed_image = None
+    # -------------------------------------------------------------------------
 
     def create_widgets(self):
         # Toggle button for collapsing
@@ -46,7 +48,7 @@ class ImageApp:
         self.canvas.grid(row=1, column=1, padx=10, pady=10, sticky="nsew")
         
         # Label for image file path
-        self.filepath_label = tk.Label(self.main_frame, text="")
+        self.filepath_label = tk.Label(self.main_frame, textvariable=self.image_path)
         self.filepath_label.grid(row=2, column=1, padx=10, pady=10, sticky="nsew")
         
         # Control visibility flag
@@ -100,59 +102,40 @@ class ImageApp:
         self.apply_button = tk.Button(self.operation_frame, text="Apply", command=self.apply_pipeline)
         self.apply_button.grid(row=6, column=0, pady=5, sticky="ew")
         
+        # Reset
+        self.reset_button = tk.Button(self.operation_frame, text="Reset", command=self.reset)
+        self.reset_button.grid(row=7, column=0, pady=5, sticky="ew")
+        
         # Save image button
         self.save_button = tk.Button(self.operation_frame, text="Save Image", command=self.save_image)
-        self.save_button.grid(row=7, column=0, pady=5, sticky="ew")
+        self.save_button.grid(row=8, column=0, pady=5, sticky="ew")
+        
+        self.update_enables()
     
-    def toggle_controls(self):
-        if self.controls_visible:
-            self.operation_frame.grid_remove()
-            self.toggle_button.config(text="Show Controls")
-        else:
-            self.operation_frame.grid()
-            self.toggle_button.config(text="Hide Controls")
-        self.controls_visible = not self.controls_visible
+    # -------------------------------------------------------------------------
     
     def load_image(self):
         # File dialog to select image
-        self.image_path = filedialog.askopenfilename(filetypes=[("Image files", "*.jpg *.jpeg *.png")])
-        if self.image_path:
-            self.image: np.ndarray = cv2.imread(self.image_path)
+        self.image_path.set(filedialog.askopenfilename(filetypes=[("Image files", "*.jpg *.jpeg *.png")]))
+        if self.image_path.get():
+            self.image = cv2.imread(self.image_path.get())
             self.display_image(self.image)
-            self.filepath_label.config(text=self.image_path)
+            
+            self.update_enables()
             
     def load_palette(self):
         self.palette_path = filedialog.askopenfilename(filetypes=[("Palette files", "*.gpl")])
         if self.palette_path:
             self.target_palette = palette.FromFilepath(self.palette_path)
-        
-    def display_image(self, image: np.ndarray):
-        # Resize image to fit canvas
-        canvas_width = self.canvas.winfo_width()
-        canvas_height = self.canvas.winfo_height()
-        
-        image_width, image_height, _ = image.shape
-        image_aspect_ratio = image_width / image_height
-        canvas_aspect_ratio = canvas_width / canvas_height
-        
-        if canvas_aspect_ratio > image_aspect_ratio:
-            new_height = canvas_height
-            new_width = int(new_height * image_aspect_ratio)
-        else:
-            new_width = canvas_width
-            new_height = int(new_width / image_aspect_ratio)
             
-        image = helper_functions.resize_no_interpolation(image, new_width, new_height)
-        
-        # Convert image to displayable format
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        image = Image.fromarray(image)
-        self.image = image
-        self.image.thumbnail((400, 400))
-        self.tk_image = ImageTk.PhotoImage(image)
-        self.canvas.create_image(200, 200, image=self.tk_image)
+            self.update_enables()
     
+    # -------------------------------------------------------------------------
+      
     def apply_pipeline(self):
+        self.update_enables(tk.DISABLED)
+        self.root.update_idletasks()
+        
         if not self.image_path:
             messagebox.showwarning("No Image", "Please load an image first.")
             return
@@ -178,18 +161,107 @@ class ImageApp:
         pipeline.append(filters.remap_img)
         
         # Apply
-        image: np.ndarray = cv2.imread(self.image_path)
+        image: np.ndarray = cv2.imread(self.image_path.get())
         processed_image: np.ndarray = pipeline.apply(image)
         
         # Display
+        self.processed_image = processed_image
         self.display_image(processed_image)
-    
+        
+        self.update_enables()
+        
+    def display_image(self, image: np.ndarray):
+        # Resize image to fit canvas
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        
+        image_width, image_height, _ = image.shape
+        image_aspect_ratio = image_width / image_height
+        canvas_aspect_ratio = canvas_width / canvas_height
+        
+        if canvas_aspect_ratio > image_aspect_ratio:
+            new_height = canvas_height
+            new_width = int(new_height * image_aspect_ratio)
+        else:
+            new_width = canvas_width
+            new_height = int(new_width / image_aspect_ratio)
+            
+        image = helper_functions.resize_no_interpolation(image, new_width, new_height)
+        
+        # Convert image to displayable format
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image = Image.fromarray(image)
+        # self.image = image
+        image.thumbnail((400, 400))
+        self.tk_image = ImageTk.PhotoImage(image)
+        self.image_display = self.canvas.create_image(200, 200, image=self.tk_image)
+        
     def save_image(self):
-        if self.processed_image is None:
-            messagebox.showwarning("No Processed Image", "Please apply an operation to the image first.")
-            return
+        img = self.image
+        if self.processed_image is not None:
+            img = self.processed_image
         
         save_path = filedialog.asksaveasfilename(defaultextension=".jpg", filetypes=[("JPEG files", "*.jpg"), ("PNG files", "*.png"), ("All files", "*.*")])
         if save_path:
-            cv2.imwrite(save_path, self.processed_image)
+            cv2.imwrite(save_path, img)
             messagebox.showinfo("Image Saved", f"Image successfully saved to {save_path}")
+      
+    def toggle_controls(self):
+        if self.controls_visible:
+            self.operation_frame.grid_remove()
+            self.toggle_button.config(text="Show Controls")
+        else:
+            self.operation_frame.grid()
+            self.toggle_button.config(text="Hide Controls")
+        
+        self.controls_visible = not self.controls_visible
+        
+        if self.processed_image is not None:
+            self.display_image(self.image)
+        elif self.image is not None:
+            self.display_image(self.processed_image)
+      
+    def update_enables(self, setenable = None):
+        if setenable is None:
+            self.update_enables(tk.DISABLED)
+            self.load_image_button.config(state=tk.NORMAL)
+            self.load_palette_button.config(state=tk.NORMAL)
+            self.reset_button.config(state=tk.NORMAL)
+        
+            if self.image_path.get():
+                self.simplify_checkbox.config(state=tk.NORMAL)
+                self.add_edges_checkbox.config(state=tk.NORMAL)
+                
+                self.apply_button.config(state=tk.NORMAL)
+                self.save_button.config(state=tk.NORMAL)
+                
+                if self.palette_path:
+                    self.quantize_checkbox.config(state=tk.NORMAL)
+                else:
+                    self.quantize_var.set(False)
+                    
+        else:
+            self.load_image_button.config(state=setenable)
+            self.load_palette_button.config(state=setenable)
+            self.reset_button.config(state=setenable)
+            
+            self.simplify_checkbox.config(state=setenable)
+            self.quantize_checkbox.config(state=setenable)
+            self.add_edges_checkbox.config(state=setenable)
+            
+            self.apply_button.config(state=setenable)
+            self.save_button.config(state=setenable)
+                
+    # -------------------------------------------------------------------------
+    
+    def reset(self):
+        self.image: np.ndarray = None
+        self.image_path.set("")
+        self.processed_image = None
+        
+        self.target_palette: palette.Palette|None = None
+        self.palette_path = ""
+        
+        if self.image_display is not None:
+            self.canvas.delete(self.image_display)
+            self.image_display = None

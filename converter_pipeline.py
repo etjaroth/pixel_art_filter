@@ -51,11 +51,9 @@ class ConverterPipeline:
         Sends img through the pipeline.
         """
         
-        size_y, size_x, _ = img.shape
-        
         if self.add_edges:
             edges = extract_edges(img)
-            edges = helper_functions.resize(edges, size_x, size_y)
+            edges = helper_functions.resize(edges, self.size_x, self.size_y)
         
         # Apply filters
         img = prep_img(img, self.size_x, self.size_y)
@@ -71,7 +69,7 @@ class ConverterPipeline:
 # -----------------------------------------------------------------------------
 # Pre-pipeline
 
-def extract_edges(img: np.ndarray, size_x: int, size_y: int) -> np.ndarray:
+def extract_edges(img: np.ndarray) -> np.ndarray:
     """
     Finds the edges of an image.
     """

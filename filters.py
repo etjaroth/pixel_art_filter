@@ -51,7 +51,6 @@ def remap_img(pipeline: "ConverterPipeline", img: np.ndarray) -> np.ndarray:
         closest_distance = float(np.inf)
         for c_out in pipeline.target_palette.palette.values():
             distance = np.linalg.norm(c_in.lab_color.astype(np.float32) - c_out.lab_color.astype(np.float32))
-            print("distance", distance)
             if distance < closest_distance:
                 closest_distance = distance
                 best_match = c_out
